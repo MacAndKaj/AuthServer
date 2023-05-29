@@ -1,6 +1,7 @@
 package server
 
 import (
+	"AuthServer/config"
 	"AuthServer/controllers"
 	"AuthServer/models"
 	"context"
@@ -17,6 +18,7 @@ import (
 type serverContext struct {
 	logger *log.Logger
 	db     *models.UsersDatabase
+	config *config.Config
 }
 
 type AuthServer struct {
@@ -24,7 +26,7 @@ type AuthServer struct {
 	server *http.Server
 }
 
-func NewServer(p string, l *log.Logger) *AuthServer {
+func NewServer(p string, cfg *config.Config, l *log.Logger) *AuthServer {
 	server := &http.Server{
 		Addr:         p,
 		Handler:      nil,
@@ -37,6 +39,7 @@ func NewServer(p string, l *log.Logger) *AuthServer {
 		ctx: serverContext{
 			logger: l,
 			db:     models.InitUsersDatabase(l),
+			config: cfg,
 		},
 		server: server,
 	}
@@ -44,7 +47,9 @@ func NewServer(p string, l *log.Logger) *AuthServer {
 
 func createRouter(ctx *serverContext) *mux.Router {
 	router := mux.NewRouter()
-	getSubrouter := router.Methods("GET").Subrouter()
+	api_router := router.PathPrefix("/api/v1").Subrouter()
+
+	getSubrouter := api_router.Methods("GET").Subrouter()
 	getSubrouter.
 		Path("/ping").
 		Handler(handlers.LoggingHandler(os.Stdout, controllers.NewPingHandler(ctx.logger)))
@@ -53,25 +58,22 @@ func createRouter(ctx *serverContext) *mux.Router {
 		Path("/users/login").
 		Handler(handlers.LoggingHandler(os.Stdout, controllers.NewLoginHandler(ctx.logger, ctx.db)))
 
-	putSubrouter := router.Methods("PUT").Subrouter()
-	putSubrouter.
+	// putSubrouter := router.Methods("PUT").Subrouter()
+
+	postSubrouter := api_router.Methods("POST").Subrouter()
+	postSubrouter.
 		Path("/users/create").
 		Handler(handlers.LoggingHandler(os.Stdout, controllers.NewAddUserHandler(ctx.logger, ctx.db)))
-
-	// postRouter := router.Methods("POST").Subrouter()
-	// postRouter.
-	// 	Path("/users/create").
-	// 	Handler(controllers.NewAddUserHandler())
 
 	return router
 }
 
 func (s *AuthServer) Run() {
 	s.ctx.logger.Println("Configuring server")
-	// s.ctx.logger.Println("Addr:", s.server.Addr)
 
 	router := createRouter(&s.ctx)
 	s.server.Handler = router
+	s.ctx.logger.Println("Server working on address: ", s.server.Addr)
 
 	go func() {
 		err := s.server.ListenAndServe()

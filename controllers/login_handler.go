@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type LoginRequest struct {
@@ -43,23 +46,63 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err1 != nil || err2 != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write(createErrorResponse("Error during checking request validity"))
+		return
 	}
+
+	var userId uint64
 
 	if emailExists {
 		if !h.db.VerifyEmail(req.UsernameOrEmail, req.Password) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write(createErrorResponse("Incorrect password"))
+			return
 		}
-	}
 
-	if loginExists {
+		userId, err = h.db.GetUserIdForLogin(req.UsernameOrEmail)
+
+	} else if loginExists {
 		if !h.db.VerifyLogin(req.UsernameOrEmail, req.Password) {
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write(createErrorResponse("Incorrect password"))
+			return
 		}
+
+		userId, err = h.db.GetUserIdForLogin(req.UsernameOrEmail)
 	}
 
-	// h.db.CreateTokenFor(req.UsernameOrEmail)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(createErrorResponse("Internal error (user)"))
+		return
+	}
+
+	t := models.Token{
+		UserId: int(userId),
+		Hash:   generateNewToken(int(userId)),
+		// ExpirationDate: time.,
+		Permissions: "wr",
+	}
+
+	h.logger.Println("New token: ", t)
+
+	err = h.db.AddNewTokenForUser(t)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write(createErrorResponse("Internal error (token)"))
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func generateNewToken(id int) string {
+	claims := jwt.RegisteredClaims{
+		ID:        string(id),
+		Issuer:    "SAS", // SimpleAuthServer
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+		ExpiresAt: jwt.NewNumericDate((time.Now().Add(500 * 24 * time.Hour))),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	return token.Raw
 }

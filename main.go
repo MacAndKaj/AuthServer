@@ -11,7 +11,8 @@ func main() {
 	l := log.New(os.Stdout, "[AuthServer]", log.LstdFlags)
 
 	serverArguments := config.ParseArguments(os.Args)
+	cfg := config.NewConfig()
 
-	s := server.NewServer(serverArguments.Port, l)
+	s := server.NewServer(serverArguments.Port, cfg, l)
 	s.Run()
 }

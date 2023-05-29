@@ -104,3 +104,32 @@ func (db *UsersDatabase) verify(usernameOrEmail string, field string, passwordCh
 
 	return passwordOfUser == passwordChecked
 }
+
+func (db *UsersDatabase) GetUserIdForLogin(username string) (uint64, error) {
+	return db.getUserId(username, "nickname")
+}
+
+func (db *UsersDatabase) GetUserIdForEmail(email string) (uint64, error) {
+	return db.getUserId(email, "email")
+}
+
+func (db *UsersDatabase) getUserId(usernameOrEmail string, field string) (uint64, error) {
+	rows, err := db.dbHandle.Query(`SELECT id FROM users WHERE `+field+"=?", usernameOrEmail)
+
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return 0, fmt.Errorf("No ID found for user, does it exist?")
+	}
+
+	var id uint64
+	err = rows.Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
